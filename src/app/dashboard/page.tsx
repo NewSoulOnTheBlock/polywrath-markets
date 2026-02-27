@@ -9,6 +9,8 @@ import { DepositModal } from '@/components/DepositModal';
 import { useVaultBalance } from '@/hooks/useVault';
 import { useAgent } from '@/context/AgentContext';
 import type { Market } from '@/lib/polymarket';
+import type { MarketContext } from '@/lib/market-context';
+import { fetchMarketContext } from '@/lib/market-context';
 
 export default function Dashboard() {
   const { isConnected } = useAccount();
@@ -16,9 +18,29 @@ export default function Dashboard() {
   const { active: agentActive, logs: agentLogs, toggleAgent } = useAgent();
   const [markets, setMarkets] = useState<Market[]>([]);
   const [depositModal, setDepositModal] = useState<'deposit' | 'withdraw' | null>(null);
+  const [marketContext, setMarketContext] = useState<MarketContext | null>(null);
 
   useEffect(() => {
     fetch('/api/markets').then(r => r.json()).then(setMarkets).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    // Poll external data sources every 15s for dashboard/debugging
+    let active = true;
+    const load = async () => {
+      try {
+        const ctx = await fetchMarketContext();
+        if (active) setMarketContext(ctx);
+      } catch {
+        // ignore
+      }
+    };
+    load();
+    const id = setInterval(load, 15000);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
   }, []);
 
   if (!isConnected) {
@@ -119,6 +141,43 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
+            </Card>
+
+            {/* External Data Debug Panel */}
+            <Card className="mt-4 p-4">
+              <h3 className="font-semibold mb-3">Market Data (Phase 1)</h3>
+              {marketContext ? (
+                <div className="space-y-3 text-xs font-mono text-[var(--muted)]">
+                  {marketContext.coinbase && (
+                    <div>
+                      <p className="text-[var(--muted)] mb-1">Coinbase BTC-USD</p>
+                      <p>Spot {marketContext.coinbase.price.toFixed(2)} | Bid {marketContext.coinbase.bid.toFixed(2)} | Ask {marketContext.coinbase.ask.toFixed(2)}</p>
+                      <p>Vol24h {marketContext.coinbase.volume24h.toFixed(2)}</p>
+                    </div>
+                  )}
+                  {marketContext.binance && (
+                    <div>
+                      <p className="text-[var(--muted)] mb-1 mt-2">Binance BTCUSDT (last {marketContext.binance.windowSeconds}s)</p>
+                      <p>Last {marketContext.binance.lastPrice.toFixed(2)} | VWAP {marketContext.binance.vwapWindow?.toFixed(2) ?? 'n/a'}</p>
+                      <p>Buys {marketContext.binance.buyVolumeWindow.toFixed(3)} / Sells {marketContext.binance.sellVolumeWindow.toFixed(3)} (trades {marketContext.binance.tradesWindow})</p>
+                    </div>
+                  )}
+                  {marketContext.fearGreed && (
+                    <div>
+                      <p className="text-[var(--muted)] mb-1 mt-2">Fear &amp; Greed Index</p>
+                      <p>Value {marketContext.fearGreed.value} ({marketContext.fearGreed.classification})</p>
+                    </div>
+                  )}
+                  {marketContext.solana && (
+                    <div>
+                      <p className="text-[var(--muted)] mb-1 mt-2">Solana</p>
+                      <p>Slot {marketContext.solana.slot}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-[var(--muted)]">Loading external data...</p>
+              )}
             </Card>
 
             {/* Agent Status */}
