@@ -1,0 +1,8 @@
+﻿Hardhat only supports ESM projects.
+
+Please make sure you have `"type": "module"` in your package.json.
+
+You can set it automatically by running:
+
+npm pkg set type="module"
+
